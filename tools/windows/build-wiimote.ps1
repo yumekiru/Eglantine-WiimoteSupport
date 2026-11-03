@@ -4,8 +4,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$buildRoot = Join-Path $projectRoot $BuildDirectory
-$playRoot = Join-Path $projectRoot $Destination
+$buildRoot = if ([IO.Path]::IsPathRooted($BuildDirectory)) { [IO.Path]::GetFullPath($BuildDirectory) } else { Join-Path $projectRoot $BuildDirectory }
+$playRoot = if ([IO.Path]::IsPathRooted($Destination)) { [IO.Path]::GetFullPath($Destination) } else { Join-Path $projectRoot $Destination }
 $configureArgs = @('-S', $projectRoot, '-B', $buildRoot, '-G', 'Visual Studio 17 2022',
     '-A', 'x64', '-DENABLE_WERROR=OFF', '-DYUZU_TESTS=OFF',
     '-DENABLE_QT_TRANSLATION=OFF', '-DWIIMOTE_BUILD_DIAGNOSTIC=ON')
