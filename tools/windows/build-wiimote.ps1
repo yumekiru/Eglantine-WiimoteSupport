@@ -29,9 +29,9 @@ if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed.' }
 $previousCompilerOverrides = $env:_CL_
 try {
     $env:_CL_ = ($previousCompilerOverrides + ' /wd4505 /wd5245 /wd4189').Trim()
-    & cmake --build $buildRoot --config Release --target yuzu wiimote_diagnostic wiimote_protocol_test --parallel 8
+    & cmake --build $buildRoot --config Release --target yuzu wiimote_diagnostic wiimote_protocol_test wiimote_motion_test --parallel 8
     if ($LASTEXITCODE -ne 0) { throw 'Compilation failed.' }
-    & ctest --test-dir $buildRoot -C Release -R '^wiimote_protocol$' --output-on-failure
+    & ctest --test-dir $buildRoot -C Release -R '^wiimote_(protocol|motion)$' --output-on-failure
     if ($LASTEXITCODE -ne 0) { throw 'Wii Remote decoder tests failed.' }
 } finally {
     $env:_CL_ = $previousCompilerOverrides

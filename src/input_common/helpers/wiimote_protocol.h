@@ -22,7 +22,21 @@ struct Sample {
     std::uint16_t buttons{};
     std::array<float, 3> accel{};
     std::optional<std::array<float, 3>> gyro;
+    std::array<float, 3> gyro_raw{};
+    std::array<bool, 3> gyro_slow{};
 };
+
+inline std::array<float, 3>
+GyroRates(const std::array<float, 3> &raw, const std::array<bool, 3> &slow,
+          const std::array<float, 3> &zero = {8192.0f, 8192.0f, 8192.0f}) {
+    std::array<float, 3> result{};
+    constexpr std::array sign{-1.0f, -1.0f, 1.0f};
+    for (std::size_t axis = 0; axis < result.size(); ++axis) {
+        result[axis] = sign[axis] * (raw[axis] - zero[axis]) * (slow[axis] ? 440.0f : 2000.0f) /
+                       (8192.0f * 360.0f);
+    }
+    return result;
+}
 
 inline std::optional<Sample> Decode(std::span<const std::uint8_t> report) {
     if (report.size() < 6 || (report[0] != 0x31 && report[0] != 0x35 && report[0] != 0x37)) {
@@ -45,14 +59,12 @@ inline std::optional<Sample> Decode(std::span<const std::uint8_t> report) {
     if (report[0] != 0x31) {
         const auto ext = report.subspan(offset, 6);
         if ((ext[5] & 3) == 2) {
-            const auto rate = [](std::uint8_t low, std::uint8_t high, bool slow) {
-                const int raw = low | ((high & 0xfc) << 6);
-                return static_cast<float>(raw - 8192) * (slow ? 440.0f : 2000.0f) /
-                       (8192.0f * 360.0f);
+            const auto raw = [](std::uint8_t low, std::uint8_t high) {
+                return static_cast<float>(low | ((high & 0xfc) << 6));
             };
-            sample.gyro = std::array{-rate(ext[2], ext[5], (ext[3] & 1) != 0),
-                                     -rate(ext[1], ext[4], (ext[4] & 2) != 0),
-                                     rate(ext[0], ext[3], (ext[3] & 2) != 0)};
+            sample.gyro_raw = {raw(ext[2], ext[5]), raw(ext[1], ext[4]), raw(ext[0], ext[3])};
+            sample.gyro_slow = {(ext[3] & 1) != 0, (ext[4] & 2) != 0, (ext[3] & 2) != 0};
+            sample.gyro = GyroRates(sample.gyro_raw, sample.gyro_slow);
         }
     }
     return sample;

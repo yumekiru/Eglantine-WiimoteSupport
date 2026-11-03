@@ -1068,7 +1068,8 @@ std::unique_ptr<Common::Input::InputDevice> InputFactory::CreateMotionDevice(
 
     if (params.Has("motion")) {
         const auto motion_sensor = params.Get("motion", 0);
-        const auto gyro_threshold = params.Get("threshold", 0.007f);
+        const float default_threshold = input_engine->GetEngineName() == "wiimote" ? 0.0005f : 0.007f;
+        const auto gyro_threshold = params.Get("threshold", default_threshold);
         input_engine->PreSetController(identifier);
         input_engine->PreSetMotion(identifier, motion_sensor);
         return std::make_unique<InputFromMotion>(identifier, motion_sensor, gyro_threshold,

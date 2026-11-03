@@ -2,13 +2,13 @@
 #include "input_common/drivers/wiimote.h"
 #include "input_common/helpers/wiimote_protocol.h"
 
+#include "common/logging.h"
+#include "common/settings.h"
+#include <SDL3/SDL.h>
 #include <algorithm>
 #include <chrono>
 #include <string>
 #include <vector>
-#include <SDL3/SDL.h>
-#include "common/logging.h"
-#include "common/settings.h"
 
 namespace InputCommon {
 namespace {
@@ -22,7 +22,7 @@ constexpr std::array<u16, 11> ButtonMasks{
 };
 } // namespace
 
-Wiimotes::Wiimotes(const std::string& engine) : InputEngine(engine) {
+Wiimotes::Wiimotes(const std::string &engine) : InputEngine(engine) {
     for (std::size_t port = 0; port < remotes.size(); ++port) {
         PreSetController(Identifier(port));
         for (int button = 0; button < static_cast<int>(ButtonMasks.size()); ++button) {
@@ -56,14 +56,14 @@ Common::ParamPackage Wiimotes::Params(std::size_t port) const {
             {"pad", "0"}};
 }
 
-bool Wiimotes::Command(Remote& remote, std::span<const u8> report) {
+bool Wiimotes::Command(Remote &remote, std::span<const u8> report) {
     std::array<u8, 22> padded{};
     std::ranges::copy(report, padded.begin());
     padded[1] = static_cast<u8>((padded[1] & 0xfe) | (remote.rumble.load() ? 1 : 0));
     return SDL_hid_write(remote.handle, padded.data(), padded.size()) >= 0;
 }
 
-bool Wiimotes::WriteRegister(Remote& remote, u8 device, u8 address, u8 value,
+bool Wiimotes::WriteRegister(Remote &remote, u8 device, u8 address, u8 value,
                              std::stop_token stop) {
     const std::array<u8, 7> output{0x16, 0x06, device, 0, address, 1, value};
     if (!Command(remote, output)) {
@@ -84,7 +84,7 @@ bool Wiimotes::WriteRegister(Remote& remote, u8 device, u8 address, u8 value,
 }
 
 void Wiimotes::Initialize(std::size_t port, std::stop_token stop) {
-    auto& remote = remotes[port];
+    auto &remote = remotes[port];
     const std::array<u8, 2> leds{0x11, static_cast<u8>(0x10u << port)};
     Command(remote, leds);
     // DolphinBar drops memory-read replies from some Motion 2-in-1 remotes.
@@ -102,8 +102,8 @@ void Wiimotes::Initialize(std::size_t port, std::stop_token stop) {
 }
 
 void Wiimotes::Scan(std::stop_token stop) {
-    auto* devices = SDL_hid_enumerate(0x057e, 0x0306);
-    for (auto* device = devices; device && !stop.stop_requested(); device = device->next) {
+    auto *devices = SDL_hid_enumerate(0x057e, 0x0306);
+    for (auto *device = devices; device && !stop.stop_requested(); device = device->next) {
         if (!device->product_string ||
             std::wstring(device->product_string).find(L"Mayflash") == std::wstring::npos ||
             device->interface_number < 0 ||
@@ -111,7 +111,7 @@ void Wiimotes::Scan(std::stop_token stop) {
             continue;
         }
         const auto port = static_cast<std::size_t>(device->interface_number);
-        auto& remote = remotes[port];
+        auto &remote = remotes[port];
         if (remote.handle) {
             continue;
         }
@@ -130,7 +130,7 @@ void Wiimotes::Scan(std::stop_token stop) {
 }
 
 void Wiimotes::Disconnect(std::size_t port) {
-    auto& remote = remotes[port];
+    auto &remote = remotes[port];
     remote.connected = false;
     if (remote.handle) {
         const std::array<u8, 2> off{0x10, 0};
@@ -142,6 +142,9 @@ void Wiimotes::Disconnect(std::size_t port) {
     remote.motion = {};
     remote.last_sample = 0;
     remote.has_gyro = false;
+    remote.calibrated = false;
+    remote.calibration.Reset();
+    remote.last_led_update = 0;
     remote.last_rumble = false;
     SetAxis(Identifier(port), 0, 0);
     SetAxis(Identifier(port), 1, 0);
@@ -152,7 +155,7 @@ void Wiimotes::Disconnect(std::size_t port) {
 }
 
 void Wiimotes::Process(std::size_t port, std::span<const u8> report) {
-    auto& remote = remotes[port];
+    auto &remote = remotes[port];
     const auto sample = WiimoteProtocol::Decode(report);
     if (!sample) {
         return;
@@ -170,9 +173,21 @@ void Wiimotes::Process(std::size_t port, std::span<const u8> report) {
     remote.motion.accel_y = sample->accel[1];
     remote.motion.accel_z = sample->accel[2];
     if (sample->gyro) {
-        remote.motion.gyro_x = (*sample->gyro)[0];
-        remote.motion.gyro_y = (*sample->gyro)[1];
-        remote.motion.gyro_z = (*sample->gyro)[2];
+        if (remote.calibration.Add(sample->gyro_raw, sample->gyro_slow, sample->accel, Now())) {
+            remote.calibrated = true;
+            const auto &zero = remote.calibration.Zero();
+            LOG_INFO(Input, "DolphinBar slot {} gyro zero calibrated: pitch={} roll={} yaw={}",
+                     port + 1, zero[0], zero[1], zero[2]);
+            const std::array<u8, 2> leds{0x11, static_cast<u8>(0x10u << port)};
+            Command(remote, leds);
+        }
+        const auto gyro = remote.calibration.IsReady()
+                              ? WiimoteProtocol::GyroRates(sample->gyro_raw, sample->gyro_slow,
+                                                           remote.calibration.Zero())
+                              : std::array<float, 3>{};
+        remote.motion.gyro_x = gyro[0];
+        remote.motion.gyro_y = gyro[1];
+        remote.motion.gyro_z = gyro[2];
         if (!remote.has_gyro) {
             LOG_INFO(Input, "DolphinBar slot {} is streaming MotionPlus", port + 1);
             remote.has_gyro = true;
@@ -197,7 +212,7 @@ void Wiimotes::Run(std::stop_token stop) {
             next_scan = Now() + 5000000;
         }
         for (std::size_t port = 0; port < remotes.size(); ++port) {
-            auto& remote = remotes[port];
+            auto &remote = remotes[port];
             if (!remote.handle) {
                 continue;
             }
@@ -210,6 +225,12 @@ void Wiimotes::Run(std::stop_token stop) {
                 Process(port, std::span(report.data(), static_cast<std::size_t>(size)));
             }
             const bool rumble = remote.rumble.load();
+            if (remote.has_gyro && !remote.calibrated && Now() - remote.last_led_update > 250000) {
+                const auto mask = static_cast<u8>(((Now() / 250000) & 1) ? (0x10u << port) : 0);
+                const std::array<u8, 2> leds{0x11, mask};
+                Command(remote, leds);
+                remote.last_led_update = Now();
+            }
             if (rumble != remote.last_rumble) {
                 const std::array<u8, 2> output{0x10, 0};
                 Command(remote, output);
@@ -228,6 +249,7 @@ std::vector<Common::ParamPackage> Wiimotes::GetInputDevices() const {
         }
         auto params = Params(port);
         params.Set("has_gyro", remotes[port].has_gyro.load() ? 1 : 0);
+        params.Set("calibrated", remotes[port].calibrated.load() ? 1 : 0);
         params.Set("display", port == 0 ? "Wii Remote 1 (Left)" : "Wii Remote 2 (Right)");
         devices.push_back(std::move(params));
     }
@@ -241,7 +263,7 @@ std::vector<Common::ParamPackage> Wiimotes::GetInputDevices() const {
     return devices;
 }
 
-ButtonMapping Wiimotes::GetButtonMappingForDevice(const Common::ParamPackage& params) {
+ButtonMapping Wiimotes::GetButtonMappingForDevice(const Common::ParamPackage &params) {
     const auto right = static_cast<std::size_t>(params.Get("port", 0));
     const auto left = static_cast<std::size_t>(params.Get("port2", params.Get("port", 0)));
     if (left >= remotes.size() || right >= remotes.size()) {
@@ -273,7 +295,7 @@ ButtonMapping Wiimotes::GetButtonMappingForDevice(const Common::ParamPackage& pa
     return mapping;
 }
 
-AnalogMapping Wiimotes::GetAnalogMappingForDevice(const Common::ParamPackage& params) {
+AnalogMapping Wiimotes::GetAnalogMappingForDevice(const Common::ParamPackage &params) {
     const auto right = static_cast<std::size_t>(params.Get("port", 0));
     const auto left = static_cast<std::size_t>(params.Get("port2", params.Get("port", 0)));
     if (left >= remotes.size() || right >= remotes.size()) {
@@ -281,7 +303,7 @@ AnalogMapping Wiimotes::GetAnalogMappingForDevice(const Common::ParamPackage& pa
     }
     auto left_stick = Params(left);
     auto right_stick = Params(right);
-    for (auto* stick : {&left_stick, &right_stick}) {
+    for (auto *stick : {&left_stick, &right_stick}) {
         stick->Set("axis_x", 0);
         stick->Set("axis_y", 1);
     }
@@ -289,7 +311,7 @@ AnalogMapping Wiimotes::GetAnalogMappingForDevice(const Common::ParamPackage& pa
             {Settings::NativeAnalog::RStick, std::move(right_stick)}};
 }
 
-MotionMapping Wiimotes::GetMotionMappingForDevice(const Common::ParamPackage& params) {
+MotionMapping Wiimotes::GetMotionMappingForDevice(const Common::ParamPackage &params) {
     auto left = Params(static_cast<std::size_t>(params.Get("port2", params.Get("port", 0))));
     auto right = Params(static_cast<std::size_t>(params.Get("port", 0)));
     left.Set("motion", 0);
@@ -298,12 +320,13 @@ MotionMapping Wiimotes::GetMotionMappingForDevice(const Common::ParamPackage& pa
             {Settings::NativeMotion::MotionRight, std::move(right)}};
 }
 
-bool Wiimotes::IsVibrationEnabled(const PadIdentifier& identifier) {
+bool Wiimotes::IsVibrationEnabled(const PadIdentifier &identifier) {
     return identifier.port < remotes.size() && remotes[identifier.port].connected;
 }
 
-Common::Input::DriverResult Wiimotes::SetVibration(
-    const PadIdentifier& identifier, const Common::Input::VibrationStatus& vibration) {
+Common::Input::DriverResult
+Wiimotes::SetVibration(const PadIdentifier &identifier,
+                       const Common::Input::VibrationStatus &vibration) {
     if (!IsVibrationEnabled(identifier)) {
         return Common::Input::DriverResult::NotSupported;
     }

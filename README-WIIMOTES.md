@@ -33,6 +33,13 @@ For an L+R prompt, press 1 on each remote together. For SL+SR on one remote, pre
 
 Run `Play/wiimote_diagnostic.exe` with the emulator and Dolphin closed to repeat the hardware check. Gently rotate each remote during its 20-second capture. It reports success only after receiving valid MotionPlus data from both remotes. `Play/wiimote_protocol_test.exe` repeats the deterministic decoder tests.
 
+## Gyro calibration (v0.2.0)
+
+The build now measures each remote's gyro zero after two seconds of stable motion. Leave both remotes still on a table at startup until the player LEDs stop flashing. Detected movement restarts the measurement window. Keep the remote completely still; steady rotation cannot always be distinguished from sensor bias without an external reference. Reconnecting repeats this measurement, so calibration is not tied to a particular bar slot or borrowed from the other remote.
+
+Bias is removed from raw sensor counts before fast/slow range scaling. The Wiimote-specific motion cutoff is reduced from 2.52 degrees/second to 0.18 degrees/second, retaining fine aiming movement while remaining above the measured stationary noise. Explicit custom motion thresholds still take precedence.
+
+`wiimote_diagnostic.exe --stationary` performs a 20-second rest test. In this setup the worst mean stationary rate fell from approximately 30 degrees/second to 0.003 degrees/second. Numeric decoder/calibration tests and an actual emulator motion-filter regression both pass. The owner reported improved archery control after this update, but aiming remains difficult. This is an experimental improvement, not a claim that archery is fully fixed. The v0.1.0 baseline does not include these corrections.
 ## Implementation and limits
 
 The direct driver owns DolphinBar interfaces 0 and 1, activates integrated MotionPlus without reading peripheral memory, decodes accelerometer and gyro reports, and sends each hand separately to the emulator's existing motion processing. Ordinary Wii rumble is supported. Device disconnects clear buttons and motion; the worker scans for reconnections.
