@@ -55,6 +55,8 @@ if (ANDROID)
     target_link_libraries(input_common PRIVATE android)
 else()
     target_sources(input_common PRIVATE
+        drivers/wiimote.cpp
+        drivers/wiimote.h
         drivers/joycon.cpp
         drivers/joycon.h
         drivers/sdl_driver.cpp
@@ -94,3 +96,12 @@ endif()
 
 create_target_directory_groups(input_common)
 target_link_libraries(input_common PUBLIC hid_core PRIVATE common Boost::headers)
+
+option(WIIMOTE_BUILD_DIAGNOSTIC "Build the direct DolphinBar hardware diagnostic" OFF)
+if (WIIMOTE_BUILD_DIAGNOSTIC AND NOT ANDROID)
+    add_executable(wiimote_diagnostic ../../tools/wiimote_diagnostic.cpp)
+    target_link_libraries(wiimote_diagnostic PRIVATE input_common SDL3::SDL3)
+    add_executable(wiimote_protocol_test ../../tools/wiimote_protocol_test.cpp)
+    target_compile_features(wiimote_protocol_test PRIVATE cxx_std_20)
+    add_test(NAME wiimote_protocol COMMAND wiimote_protocol_test)
+endif()

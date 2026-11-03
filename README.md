@@ -1,3 +1,12 @@
+# Eglantine WiimoteSupport fork
+
+Adds direct Mayflash DolphinBar input for MotionPlus / Motion 2-in-1 Wii Remotes. Two remotes provide one player's independent left/right motion streams, with D-pad stick emulation and configurable button mappings.
+
+[Windows builds](https://github.com/yumekiru/Eglantine-WiimoteSupport/releases) · [Setup, controls, verification and limitations](README-WIIMOTES.md)
+
+Experimental, AI-assisted implementation. Live tests verified both gyro streams and game input; perfect Joy-Con equivalence or compatibility with every sport is not claimed.
+
+---
 <!--
 # SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
 # SPDX-License-Identifier: GPL-3.0-or-later

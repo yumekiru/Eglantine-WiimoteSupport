@@ -954,19 +954,21 @@ void ConfigureInputPlayer::UpdateInputDeviceCombobox() {
     }
 
     const bool is_engine_equal = first_engine == second_engine;
-    const bool is_port_equal = first_port == second_port;
-
-    if (is_engine_equal && is_port_equal) {
-        const auto devices_it = std::find_if(
-            input_devices.begin(), input_devices.end(),
-            [first_engine, first_guid, second_guid, first_port](const Common::ParamPackage& param) {
-                const bool is_guid_valid =
-                    (param.Get("guid", "") == first_guid &&
-                     param.Get("guid2", "") == second_guid) ||
-                    (param.Get("guid", "") == second_guid && param.Get("guid2", "") == first_guid);
-                return param.Get("engine", "") == first_engine && is_guid_valid &&
-                       param.Get("port", 0) == first_port;
-            });
+    if (is_engine_equal) {
+        const auto devices_it =
+            std::find_if(input_devices.begin(), input_devices.end(),
+                         [first_engine, first_guid, second_guid, first_port,
+                          second_port](const Common::ParamPackage& param) {
+                             const auto port = param.Get("port", 0);
+                             const auto port2 = param.Get("port2", port);
+                             const bool is_pair_valid =
+                                 param.Has("guid2") &&
+                                 ((param.Get("guid", "") == first_guid && port == first_port &&
+                                   param.Get("guid2", "") == second_guid && port2 == second_port) ||
+                                  (param.Get("guid", "") == second_guid && port == second_port &&
+                                   param.Get("guid2", "") == first_guid && port2 == first_port));
+                             return param.Get("engine", "") == first_engine && is_pair_valid;
+                         });
         const int device_index =
             devices_it != input_devices.end()
                 ? static_cast<int>(std::distance(input_devices.begin(), devices_it))
@@ -1534,9 +1536,12 @@ bool ConfigureInputPlayer::IsInputAcceptable(const Common::ParamPackage& params)
 
     const auto& current_input_device = input_devices[ui->comboDevices->currentIndex()];
     return params.Get("engine", "") == current_input_device.Get("engine", "") &&
-           (params.Get("guid", "") == current_input_device.Get("guid", "") ||
-            params.Get("guid", "") == current_input_device.Get("guid2", "")) &&
-           params.Get("port", 0) == current_input_device.Get("port", 0);
+           ((params.Get("guid", "") == current_input_device.Get("guid", "") &&
+             params.Get("port", 0) == current_input_device.Get("port", 0)) ||
+            (current_input_device.Has("guid2") &&
+             params.Get("guid", "") == current_input_device.Get("guid2", "") &&
+             params.Get("port", 0) ==
+                 current_input_device.Get("port2", current_input_device.Get("port", 0))));
 }
 
 void ConfigureInputPlayer::mousePressEvent(QMouseEvent* event) {

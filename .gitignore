@@ -67,3 +67,8 @@ vulkansdk*.exe
 
 # Build-time generated external sources
 externals/generated
+
+# Local Wiimote test applications and game shortcuts
+/Play/
+/Dolphin/
+/*.lnk

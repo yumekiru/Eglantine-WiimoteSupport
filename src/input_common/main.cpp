@@ -27,6 +27,7 @@
 #endif
 #ifdef HAVE_SDL3
 #include "input_common/drivers/joycon.h"
+#include "input_common/drivers/wiimote.h"
 #include "input_common/drivers/sdl_driver.h"
 #endif
 
@@ -93,6 +94,7 @@ struct InputSubsystem::Impl {
 #ifdef HAVE_SDL3
         RegisterEngine("sdl", sdl);
         RegisterEngine("joycon", joycon);
+        RegisterEngine("wiimote", wiimote);
 #endif
 
         Common::Input::RegisterInputFactory("touch_from_button",
@@ -126,6 +128,7 @@ struct InputSubsystem::Impl {
         UnregisterEngine(virtual_gamepad);
 #ifdef HAVE_SDL3
         UnregisterEngine(sdl);
+        UnregisterEngine(wiimote);
         UnregisterEngine(joycon);
 #endif
 
@@ -155,6 +158,8 @@ struct InputSubsystem::Impl {
         auto udp_devices = udp_client->GetInputDevices();
         devices.insert(devices.end(), udp_devices.begin(), udp_devices.end());
 #ifdef HAVE_SDL3
+        auto wiimote_devices = wiimote->GetInputDevices();
+        devices.insert(devices.end(), wiimote_devices.begin(), wiimote_devices.end());
         auto joycon_devices = joycon->GetInputDevices();
         devices.insert(devices.end(), joycon_devices.begin(), joycon_devices.end());
         auto sdl_devices = sdl->GetInputDevices();
@@ -192,6 +197,9 @@ struct InputSubsystem::Impl {
 #ifdef HAVE_SDL3
         if (engine == sdl->GetEngineName()) {
             return sdl;
+        }
+        if (engine == wiimote->GetEngineName()) {
+            return wiimote;
         }
         if (engine == joycon->GetEngineName()) {
             return joycon;
@@ -284,6 +292,9 @@ struct InputSubsystem::Impl {
         if (engine == sdl->GetEngineName()) {
             return true;
         }
+        if (engine == wiimote->GetEngineName()) {
+            return true;
+        }
         if (engine == joycon->GetEngineName()) {
             return true;
         }
@@ -304,6 +315,7 @@ struct InputSubsystem::Impl {
 #ifdef HAVE_SDL3
         sdl->BeginConfiguration();
         joycon->BeginConfiguration();
+        wiimote->BeginConfiguration();
 #endif
     }
 
@@ -320,6 +332,7 @@ struct InputSubsystem::Impl {
 #ifdef HAVE_SDL3
         sdl->EndConfiguration();
         joycon->EndConfiguration();
+        wiimote->EndConfiguration();
 #endif
     }
 
@@ -353,6 +366,7 @@ struct InputSubsystem::Impl {
 #ifdef HAVE_SDL3
     std::shared_ptr<SDLDriver> sdl;
     std::shared_ptr<Joycons> joycon;
+    std::shared_ptr<Wiimotes> wiimote;
 #endif
 
 #ifdef __ANDROID__

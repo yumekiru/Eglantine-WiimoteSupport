@@ -503,7 +503,8 @@ void SDLDriver::InitJoystick(SDL_JoystickID joystick_id) {
 
     if (Settings::values.enable_joycon_driver) {
         if (guid.uuid[5] == 0x05 && guid.uuid[4] == 0x7e &&
-            (guid.uuid[8] == 0x06 || guid.uuid[8] == 0x07)) {
+            (SDL_GetJoystickProduct(sdl_joystick) == 0x2006 ||
+             SDL_GetJoystickProduct(sdl_joystick) == 0x2007)) {
             LOG_WARNING(Input, "Preferring joycon driver for device index {}", joystick_id);
             SDL_CloseJoystick(sdl_joystick);
             return;
@@ -511,7 +512,8 @@ void SDLDriver::InitJoystick(SDL_JoystickID joystick_id) {
     }
 
     if (Settings::values.enable_procon_driver) {
-        if (guid.uuid[5] == 0x05 && guid.uuid[4] == 0x7e && guid.uuid[8] == 0x09) {
+        if (guid.uuid[5] == 0x05 && guid.uuid[4] == 0x7e &&
+            SDL_GetJoystickProduct(sdl_joystick) == 0x2009) {
             LOG_WARNING(Input, "Preferring joycon driver for device index {}", joystick_id);
             SDL_CloseJoystick(sdl_joystick);
             return;
@@ -657,6 +659,8 @@ SDLDriver::SDLDriver(std::string input_engine_) : InputEngine(std::move(input_en
 
     // SDL3 defaults Steam Controller Bluetooth HIDAPI support to off, which can disable gyro.
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_STEAM, "1");
+    // The direct DolphinBar driver owns these interfaces and avoids clone memory-read failures.
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_WII, "0");
     SDL_SetHint(SDL_HINT_GAMECONTROLLER_SENSOR_FUSION, "1");
     SDL_SetHint(SDL_HINT_AUTO_UPDATE_SENSORS, "1");
 

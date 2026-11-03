@@ -154,7 +154,10 @@ void EmulatedController::ReloadColorsFromSettings() {
 
 void EmulatedController::LoadDevices() {
     // TODO(german77): Use more buttons to detect the correct device
-    const auto& left_joycon = button_params[Settings::NativeButton::DRight];
+    const auto& left_joycon =
+        motion_params[Settings::NativeMotion::MotionLeft].Get("engine", "") == "wiimote"
+            ? motion_params[Settings::NativeMotion::MotionLeft]
+            : button_params[Settings::NativeButton::DRight];
     const auto& right_joycon = button_params[Settings::NativeButton::A];
 
     // Triggers for GC controllers
